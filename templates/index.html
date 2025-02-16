@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cards Against Hu'Manity</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Cards Against Hu'Manity</h1>
+
+        <!-- Join Game -->
+        <div>
+            <input type="text" id="player-name" placeholder="Enter your name">
+            <button onclick="joinGame()">Join Game</button>
+        </div>
+
+        <!-- Game Info -->
+        <h2>Round: <span id="round-number">1</span></h2>
+        <h2>Card Czar: <span id="card-czar">Waiting...</span></h2>
+        
+        <!-- Black Card -->
+        <h2>Black Card</h2>
+        <div id="black-card" class="card black-card">Click "Start Round" to begin</div>
+        <button onclick="startRound()">Start Round</button>
+
+        <!-- White Card Selection -->
+        <h2>Your White Card Choices</h2>
+        <div id="white-cards" class="card-container"></div>
+        <button onclick="drawWhiteCards()">Draw White Cards</button>
+
+        <!-- Player Scores -->
+        <h2>Scores</h2>
+        <ul id="player-scores"></ul>
+
+        <!-- Judge Section -->
+        <h2>Judge Selection</h2>
+        <div id="submitted-cards"></div>
+
+        <script>
+            const socket = io();
+            let playerName = "";
+
+            function joinGame() {
+                playerName = document.getElementById("player-name").value;
+                socket.emit("join_game", { player_name: playerName });
+            }
+
+            function startRound() {
+                socket.emit("start_round");
+            }
+
+            function drawWhiteCards() {
+                socket.emit("draw_white_cards");
+            }
+
+            function submitCard(selectedCard) {
+                socket.emit("submit_card", { player_name: playerName, white_card: selectedCard });
+            }
+
+            function judgeRound(winner) {
+                socket.emit("judge_round", { winner: winner });
+            }
+
+            socket.on("update_players", function(players) {
+                let scoreList = document.getElementById("player-scores");
+                scoreList.innerHTML = "";
+                for (let player in players) {
+                    let li = document.createElement("li");
+                    li.textContent = `${player}: ${players[player]} points`;
+                    scoreList.appendChild(li);
+                }
+            });
+
+            socket.on("new_round", function(data) {
+                document.getElementById("black-card").innerText = data.black_card.replace(/_/g, "____");
+                document.getElementById("card-czar").innerText = data.card_czar;
+            });
+
+            socket.on("white_card_choices", function(data) {
+                const whiteCardsDiv = document.getElementById("white-cards");
+                whiteCardsDiv.innerHTML = "";
+                data.white_cards.forEach(card => {
+                    const cardDiv = document.createElement("div");
+                    cardDiv.className = "card white-card";
+                    cardDiv.textContent = card;
+                    cardDiv.onclick = () => submitCard(card);
+                    whiteCardsDiv.appendChild(cardDiv);
+                });
+            });
+
+            socket.on("update_submissions", function(submissions) {
+                let submittedDiv = document.getElementById("submitted-cards");
+                submittedDiv.innerHTML = "";
+                for (let player in submissions) {
+                    let btn = document.createElement("button");
+                    btn.innerText = `${player}: ${submissions[player]}`;
+                    btn.onclick = () => judgeRound(player);
+                    submittedDiv.appendChild(btn);
+                }
+            });
+
+            socket.on("round_winner", function(data) {
+                alert(`${data.winner} won this round!`);
+                document.getElementById("round-number").innerText = data.round;
+            });
+        </script>
+    </div>
+</body>
+</html>
