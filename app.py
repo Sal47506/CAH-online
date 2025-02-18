@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
 import json
 import random
+import string
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -20,6 +21,12 @@ def get_cards():
         return {"error": "Failed to parse JSON data"}
 
 packs = get_cards()
+
+game_rooms = {}  # {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1}}
+
+# Generate a unique game ID
+def generate_game_id():
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 # Extract white and black cards
 def get_all_white_cards():
@@ -49,6 +56,18 @@ game_state = {
 def home():
     print("Launching index.html")  # Debugging print
     return render_template("index.html")
+
+@app.route("/create_game")
+def create_game():
+    game_id = generate_game_id()
+    game_rooms[game_id] = game_state.copy()
+    return redirect(url_for("game_room", game_id=game_id))
+
+@app.route("/game/<game_id>")
+def game_room(game_id):
+    if game_id not in game_room:
+        return "Game not found", 404
+    return render_template("game.html", game_id=game_id)
 
 @socketio.on("join_game")
 def handle_join_game(data):
