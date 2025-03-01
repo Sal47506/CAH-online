@@ -77,20 +77,17 @@ def handle_join_game(data):
         emit("update_players", game_state["players"], broadcast=True)
 
 @socketio.on("start_round")
-def handle_start_round():
-    game_state["black_card"] = random.choice(get_all_black_cards())
-    game_state["submissions"] = {}
+def handle_start_round(data):
+    game_id = data["game_id"]
+    if game_id in game_rooms:
+        game_rooms[game_id]["black_card"] = random.choice(get_all_black_cards())
+        game_rooms[game_id]["submissions"] = {}
     
-    # Choose a random player as the Card Czar
-    if game_state["players"]:
-        available_players = list(game_state["players"].keys())
-    
-    if game_state['card_czar'] in available_players:
-        available_players.remove(game_state['card_czar'])
-    
-    if available_players:
-        game_state['card_czar'] = random.choice(available_players)
-                            
+    if game_rooms[game_id]["players"]:
+        available_players = list(game_rooms[game_id]["players"].keys())
+        game_rooms[game_id]["card_czar"] = random.choice(available_players)
+        game_rooms[game_id]["round"] = 1
+               
 
     emit("new_round", {
         "black_card": game_state["black_card"],
@@ -98,16 +95,18 @@ def handle_start_round():
     }, broadcast=True)
 
 @socketio.on("draw_white_cards")
-def handle_draw_white_cards():
-    white_cards = random.sample(get_all_white_cards(), 5)
-    emit("white_card_choices", {"white_cards": white_cards})
+def handle_draw_white_cards(data):
+    game_id = data["game_id"]
+    game_room[game_id]['white_card'] = random.sample(get_all_white_cards(), 5)
+    emit("white_card_choices", {"white_cards": game_room[game_id]['white_card']})
 
 @socketio.on("submit_card")
 def handle_submit_card(data):
+    game_id = data["game_id"]
     player_name = data["player_name"]
     selected_card = data["white_card"]
     
-    if player_name in game_state["players"]:
+    if game_id in game_rooms and player_name in game_state["players"]:
         game_state["submissions"][player_name] = selected_card
         emit("update_submissions", game_state["submissions"], broadcast=True)
 
