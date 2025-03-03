@@ -121,9 +121,9 @@ def handle_judge_round(data):
         
         emit("round_winner", {
             "winner": winner,
-            "score": game_room[game_id]["players"][winner],
-            "round": game_room[game_id]["round"] += 1
-        }, broadcast=True)
+            "score": game_rooms[game_id]["players"][winner],
+            "round": game_rooms[game_id]["round"]
+        }, room=game_id)
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
