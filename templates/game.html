@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Room</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+</head>
+<body>
+    <h1>Welcome to Game: {{ game_id }}</h1>
+    <input type="text" id="player-name" placeholder="Enter your name">
+    <button onclick="joinGame()">Join Game</button>
+
+    <h2>Black Card</h2>
+    <div id="black-card">Waiting for game to start...</div>
+    <button onclick="startRound()">Start Round</button>
+
+    <script>
+        const socket = io();
+        const gameId = "{{ game_id }}";
+        let playerName = "";
+
+        function joinGame() {
+            playerName = document.getElementById("player-name").value;
+            socket.emit("join_game", { game_id: gameId, player_name: playerName });
+        }
+
+        function startRound() {
+            socket.emit("start_round", { game_id: gameId });
+        }
+
+        socket.on("new_round", function(data) {
+            document.getElementById("black-card").innerText = data.black_card;
+        });
+    </script>
+</body>
+</html>
