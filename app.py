@@ -106,22 +106,23 @@ def handle_submit_card(data):
     player_name = data["player_name"]
     selected_card = data["white_card"]
     
-    if game_id in game_rooms and player_name in game_state["players"]:
-        game_state["submissions"][player_name] = selected_card
-        emit("update_submissions", game_state["submissions"], broadcast=True)
+    if game_id in game_rooms and player_name in game_room[game_id]["players"]:
+        game_room[game_id]["submissions"][player_name] = selected_card
+        emit("update_submissions", game_room[game_id]["submissions"][player_name], broadcast=True)
 
 @socketio.on("judge_round")
 def handle_judge_round(data):
     winner = data["winner"]
+    game_id = data[game_id]
     
-    if winner in game_state["players"]:
-        game_state["players"][winner] += 1  # Increase winner's score
-        game_state["round"] += 1  # Move to next round
+    if game_id in game_rooms and winner in game_rooms[game_id]['players']:
+        game_room[game_id]["players"][winner] += 1  # Increase winner's score
+        game_room[game_id]["round"] += 1  # Move to next round
         
         emit("round_winner", {
             "winner": winner,
-            "score": game_state["players"][winner],
-            "round": game_state["round"]
+            "score": game_room[game_id]["players"][winner],
+            "round": game_room[game_id]["round"] += 1
         }, broadcast=True)
 
 if __name__ == "__main__":
