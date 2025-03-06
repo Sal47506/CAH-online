@@ -17,6 +17,14 @@
             <button onclick="joinGame()">Join Game</button>
         </div>
 
+        <!-- AI Czar Toggle -->
+        <div class="ai-czar-toggle">
+            <label>
+                <input type="checkbox" id="ai-czar-toggle" onchange="toggleAICzar(this.checked)">
+                Enable AI Card Czar
+            </label>
+        </div>
+
         <!-- Game Info -->
         <h2>Round: <span id="round-number">1</span></h2>
         <h2>Card Czar: <span id="card-czar">Waiting...</span></h2>
@@ -64,6 +72,10 @@
                 socket.emit("judge_round", { winner: winner });
             }
 
+            function toggleAICzar(enabled) {
+                socket.emit("toggle_ai_czar", { enabled: enabled });
+            }
+
             socket.on("update_players", function(players) {
                 let scoreList = document.getElementById("player-scores");
                 scoreList.innerHTML = "";
@@ -103,7 +115,11 @@
             });
 
             socket.on("round_winner", function(data) {
-                alert(`${data.winner} won this round!`);
+                let message = `${data.winner} won this round!`;
+                if (data.explanation) {
+                    message += `\nAI Czar's explanation: ${data.explanation}`;
+                }
+                alert(message);
                 document.getElementById("round-number").innerText = data.round;
             });
         </script>

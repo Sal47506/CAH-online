@@ -1,11 +1,23 @@
-from flask import Flask, render_template, request, redirect, url_for
-from flask_socketio import SocketIO, emit, join_room
-import json
-import random
-import string
+try:
+    from flask import Flask, render_template, request, redirect, url_for
+    from flask_socketio import SocketIO, emit, join_room
+    import json
+    import random
+    import string
+    import openai
+    import os
+    from dotenv import load_dotenv
+except ImportError as e:
+    print(f"Error importing required packages: {e}")
+    print("Please run: pip install -r requirements.txt")
+    exit(1)
+
+load_dotenv() 
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Load cards from JSON file
 def get_cards():
@@ -22,7 +34,7 @@ def get_cards():
 
 packs = get_cards()
 
-game_rooms = {}  # {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1}}
+game_rooms = {}  # {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1, "ai_czar": False}}
 
 # Generate a unique game ID
 def generate_game_id():
@@ -50,6 +62,7 @@ game_state = {
     "players": {},  # Format: {"player_name": score}
     "submissions": {},  # Format: {"player_name": "selected_white_card"}
     "card_czar": None,
+    "ai_czar": False,
 }
 
 @app.route("/")
@@ -65,7 +78,7 @@ def create_game():
 
 @app.route("/game/<game_id>")
 def game_room(game_id):
-    if game_id not in game_room:
+    if game_id not in game_rooms:
         return "Game not found", 404
     return render_template("game.html", game_id=game_id)
 
@@ -83,22 +96,31 @@ def handle_start_round(data):
         game_rooms[game_id]["black_card"] = random.choice(get_all_black_cards())
         game_rooms[game_id]["submissions"] = {}
     
-    if game_rooms[game_id]["players"]:
-        available_players = list(game_rooms[game_id]["players"].keys())
-        game_rooms[game_id]["card_czar"] = random.choice(available_players)
+        if game_rooms[game_id]["ai_czar"]:
+            game_rooms[game_id]["card_czar"] = "AI Czar"
+        else:
+            available_players = list(game_rooms[game_id]["players"].keys())
+            game_rooms[game_id]["card_czar"] = random.choice(available_players)
+        
         game_rooms[game_id]["round"] = 1
-               
 
     emit("new_round", {
         "black_card": game_state["black_card"],
         "card_czar": game_state["card_czar"]
     }, broadcast=True)
 
+@socketio.on("toggle_ai_czar")
+def handle_toggle_ai_czar(data):
+    game_id = data["game_id"]
+    if game_id in game_rooms:
+        game_rooms[game_id]["ai_czar"] = data["enabled"]
+        emit("ai_czar_status", {"enabled": data["enabled"]}, room=game_id)
+
 @socketio.on("draw_white_cards")
 def handle_draw_white_cards(data):
     game_id = data["game_id"]
-    game_room[game_id]['white_card'] = random.sample(get_all_white_cards(), 5)
-    emit("white_card_choices", {"white_cards": game_room[game_id]['white_card']})
+    game_rooms[game_id]['white_card'] = random.sample(get_all_white_cards(), 5)
+    emit("white_card_choices", {"white_cards": game_rooms[game_id]['white_card']})
 
 @socketio.on("submit_card")
 def handle_submit_card(data):
@@ -106,21 +128,50 @@ def handle_submit_card(data):
     player_name = data["player_name"]
     selected_card = data["white_card"]
     
-    if game_id in game_rooms and player_name in game_room[game_id]["players"]:
-        game_room[game_id]["submissions"][player_name] = selected_card
-        emit("update_submissions", game_room[game_id]["submissions"][player_name], broadcast=True)
+    if game_id in game_rooms and player_name in game_rooms[game_id]["players"]:
+        game_rooms[game_id]["submissions"][player_name] = selected_card
+        emit("update_submissions", game_rooms[game_id]["submissions"][player_name], broadcast=True)
+
+def ai_judge_submissions(black_card, submissions):
+    prompt = f"""As a judge in Cards Against Humanity, choose the funniest response.
+    The black card is: "{black_card}"
+    The submitted white cards are:
+    {', '.join([f'"{card}"' for card in submissions.values()])}
+    
+    Pick the winner and explain why it's the funniest in one sentence.
+    Response format: winning_card|explanation"""
+    
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        max_tokens=100,
+        temperature=0.7
+    )
+    
+    winner_card, explanation = response.choices[0].text.strip().split('|')
+    winner = [player for player, card in submissions.items() if card == winner_card.strip()][0]
+    return winner, explanation
 
 @socketio.on("judge_round")
 def handle_judge_round(data):
-    winner = data["winner"]
-    game_id = data[game_id]
+    game_id = data["game_id"]
     
-    if game_id in game_rooms and winner in game_rooms[game_id]['players']:
-        game_room[game_id]["players"][winner] += 1  # Increase winner's score
-        game_room[game_id]["round"] += 1  # Move to next round
+    if game_id in game_rooms:
+        if game_rooms[game_id]["ai_czar"]:
+            winner, explanation = ai_judge_submissions(
+                game_rooms[game_id]["black_card"],
+                game_rooms[game_id]["submissions"]
+            )
+        else:
+            winner = data["winner"]
+            explanation = None
+        
+        game_rooms[game_id]["players"][winner] += 1
+        game_rooms[game_id]["round"] += 1
         
         emit("round_winner", {
             "winner": winner,
+            "explanation": explanation,
             "score": game_rooms[game_id]["players"][winner],
             "round": game_rooms[game_id]["round"]
         }, room=game_id)

@@ -79,3 +79,23 @@ button:hover {
     margin-top: 20px;
     color: green;
 }
+
+.ai-czar-toggle {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    display: inline-block;
+}
+
+.ai-czar-toggle label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ai-czar-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
