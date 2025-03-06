@@ -4,87 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cards Against Hu'Manity</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center mb-4">Cards Against Hu'Manity</h1>
-
-        <!-- Create Game -->
-        <form action="/create_game" method="POST" class="mb-4">
-            <button type="submit" class="btn btn-primary btn-block">Create New Game</button>
-        </form>
+    <div class="container">
+        <h1>Cards Against Hu'Manity</h1>
 
         <!-- Join Game -->
-        <form action="/join_game" method="GET" class="mb-4">
-            <input type="text" id="player-name" class="form-control mb-2" placeholder="Enter your name">
-            <input type="password" id="api-key" class="form-control mb-2" placeholder="Enter your OpenAI API key (for AI Czar)">
-            <button type="submit" class="btn btn-primary btn-block">Join Game</button>
-        </form>
-
-        <!-- AI Czar Toggle -->
-        <div class="form-check form-switch mb-4">
-            <input class="form-check-input" type="checkbox" id="ai-czar-toggle" onchange="toggleAICzar(this.checked)">
-            <label class="form-check-label" for="ai-czar-toggle">Enable AI Card Czar</label>
+        <div>
+            <input type="text" id="player-name" placeholder="Enter your name">
+            <button onclick="joinGame()">Join Game</button>
         </div>
 
-        <!-- Game Info -->
-        <div class="game-info mb-4">
-            <h2>Round: <span id="round-number">1</span></h2>
-            <h2>Card Czar: <span id="card-czar">Waiting...</span></h2>
-        </div>
+        <h2>Game ID: <span id="game-id">{{ game_id }}</span></h2>
+        <button onclick="leaveGame()">Leave Game</button>
 
+        <h2>Round: <span id="round-number">1</span></h2>
+        <h2>Card Czar: <span id="card-czar">Waiting...</span></h2>
+        
         <!-- Black Card -->
-        <div class="black-card-container mb-4">
-            <h2>Black Card</h2>
-            <div id="black-card" class="card black-card">Click "Start Round" to begin</div>
-            <button class="btn btn-success mt-2" onclick="startRound()">Start Round</button>
-        </div>
+        <h2>Black Card</h2>
+        <div id="black-card" class="card black-card">Click "Start Round" to begin</div>
+        <button onclick="startRound()">Start Round</button>
 
         <!-- White Card Selection -->
-        <div class="white-card-selection mb-4">
-            <h2>Your White Card Choices</h2>
-            <div id="white-cards" class="card-container"></div>
-            <button class="btn btn-secondary mt-2" onclick="drawWhiteCards()">Draw White Cards</button>
-        </div>
+        <h2>Your White Card Choices</h2>
+        <div id="white-cards" class="card-container"></div>
+        <button onclick="drawWhiteCards()">Draw White Cards</button>
 
         <!-- Player Scores -->
-        <div class="player-scores mb-4">
-            <h2>Scores</h2>
-            <ul id="player-scores" class="list-group"></ul>
-        </div>
+        <h2>Scores</h2>
+        <ul id="player-scores"></ul>
 
         <!-- Judge Section -->
-        <div class="judge-section mb-4">
-            <h2>Judge Selection</h2>
-            <div id="submitted-cards"></div>
-        </div>
+        <h2>Judge Selection</h2>
+        <div id="submitted-cards"></div>
 
         <script>
             const socket = io();
-            const gameId = document.getElementById("game-id").value;
+            let gameId = "{{ game_id }}";
             let playerName = "";
-            let hasJoined = false;
 
             function joinGame() {
-                if (hasJoined) {
-                    alert("You have already joined the game.");
-                    return;
-                }
                 playerName = document.getElementById("player-name").value;
-                const apiKey = document.getElementById("api-key").value;
                 if (!playerName) {
-                    alert("Please enter your name.");
+                    alert("Please enter your name!");
                     return;
                 }
-                socket.emit("join_game", { 
-                    game_id: gameId,
-                    player_name: playerName,
-                    api_key: apiKey 
-                });
-                hasJoined = true;
+                socket.emit("join_game", { game_id: gameId, player_name: playerName });
+            }
+
+            function leaveGame() {
+                window.location.href = "/";
             }
 
             function startRound() {
@@ -95,21 +67,14 @@
                 socket.emit("draw_white_cards", { game_id: gameId });
             }
 
-            function submitCard(card) {
-                if (selectedCard) {
-                    selectedCard.classList.remove("selected");
-                }
-                card.classList.add("selected");
-                selectedCard = card;
-                socket.emit("submit_card", { game_id: gameId, player_name: playerName, white_card: card.textContent });
+            function submitCard(selectedCard) {
+                document.querySelectorAll('.white-card').forEach(card => card.classList.remove('selected'));
+                event.target.classList.add('selected');
+                socket.emit("submit_card", { game_id: gameId, player_name: playerName, white_card: selectedCard });
             }
 
             function judgeRound(winner) {
                 socket.emit("judge_round", { game_id: gameId, winner: winner });
-            }
-
-            function toggleAICzar(enabled) {
-                socket.emit("toggle_ai_czar", { game_id: gameId, enabled: enabled });
             }
 
             socket.on("update_players", function(players) {
@@ -117,26 +82,25 @@
                 scoreList.innerHTML = "";
                 for (let player in players) {
                     let li = document.createElement("li");
-                    li.className = "list-group-item";
                     li.textContent = `${player}: ${players[player]} points`;
                     scoreList.appendChild(li);
                 }
             });
 
             socket.on("new_round", function(data) {
-                document.getElementById("black-card").innerText = data.black_card.replace(/_/g, "____");
+                document.getElementById("black-card").innerHTML = data.black_card.replace(/_/g, "<u>____</u>");
                 document.getElementById("card-czar").innerText = data.card_czar;
             });
 
             socket.on("white_card_choices", function(data) {
                 const whiteCardsDiv = document.getElementById("white-cards");
                 whiteCardsDiv.innerHTML = "";
-                data.white_cards.forEach(cardText => {
-                    const cardButton = document.createElement("button");
-                    cardButton.className = "btn btn-light white-card";
-                    cardButton.textContent = cardText;
-                    cardButton.onclick = () => submitCard(cardButton);
-                    whiteCardsDiv.appendChild(cardButton);
+                data.white_cards.forEach(card => {
+                    const cardDiv = document.createElement("div");
+                    cardDiv.className = "card white-card";
+                    cardDiv.textContent = card;
+                    cardDiv.onclick = function(event) { submitCard(card, event); };
+                    whiteCardsDiv.appendChild(cardDiv);
                 });
             });
 
@@ -145,7 +109,6 @@
                 submittedDiv.innerHTML = "";
                 for (let player in submissions) {
                     let btn = document.createElement("button");
-                    btn.className = "btn btn-outline-primary";
                     btn.innerText = `${player}: ${submissions[player]}`;
                     btn.onclick = () => judgeRound(player);
                     submittedDiv.appendChild(btn);
@@ -153,11 +116,7 @@
             });
 
             socket.on("round_winner", function(data) {
-                let message = `${data.winner} won this round!`;
-                if (data.explanation) {
-                    message += `\nAI Czar's explanation: ${data.explanation}`;
-                }
-                alert(message);
+                alert(`${data.winner} won this round!`);
                 document.getElementById("round-number").innerText = data.round;
             });
         </script>

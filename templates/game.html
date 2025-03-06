@@ -4,53 +4,180 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Room</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center mb-4">Welcome to Game: {{ game_id }}</h1>
-        <input type="hidden" id="game-id" value="{{ game_id }}">
-        <div class="join-section mb-4">
-            <input type="text" id="player-name" class="form-control mb-2" placeholder="Enter your name">
-            <button class="btn btn-primary btn-block" onclick="joinGame()">Join Game</button>
+    <div class="container">
+        <div id="connection-status" class="connection-status">Connected</div>
+        <h1>Game Room: {{ game_id }}</h1>
+        
+        <div id="setup-area">
+            <input type="text" id="player-name" placeholder="Enter your name">
+            <button onclick="joinGame()">Join Game</button>
         </div>
 
-        <div class="black-card-container mb-4">
-            <h2>Black Card</h2>
-            <div id="black-card" class="card black-card">Waiting for game to start...</div>
-            <button class="btn btn-success mt-2" onclick="startRound()">Start Round</button>
+        <div id="game-area" style="display: none;">
+            <div id="scores"></div>
+            
+            <div class="black-card" id="black-card">
+                Waiting for game to start...
+            </div>
+
+            <div id="czar-info"></div>
+            
+            <div class="card-container" id="white-cards"></div>
+            
+            <div id="game-controls">
+                <button onclick="startRound()" id="start-button">Start Round</button>
+                <button onclick="submitCard()" id="submit-button" style="display: none;">Submit Card</button>
+                <button onclick="judgeRound()" id="judge-button" style="display: none;">Select Winner</button>
+            </div>
         </div>
-
-        <script>
-            const socket = io();
-            const gameId = document.getElementById("game-id").value;
-            let playerName = "";
-            let hasJoined = false;
-
-            function joinGame() {
-                if (hasJoined) {
-                    alert("You have already joined the game.");
-                    return;
-                }
-                playerName = document.getElementById("player-name").value;
-                if (!playerName) {
-                    alert("Please enter your name.");
-                    return;
-                }
-                socket.emit("join_game", { game_id: gameId, player_name: playerName });
-                hasJoined = true;
-            }
-
-            function startRound() {
-                socket.emit("start_round", { game_id: gameId });
-            }
-
-            socket.on("new_round", function(data) {
-                document.getElementById("black-card").innerText = data.black_card;
-            });
-        </script>
     </div>
+
+    <script>
+        const socket = io({
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5
+        });
+        const gameId = "{{ game_id }}";
+        let playerName = "";
+        let isCardCzar = false;
+        let selectedCard = null;
+
+        function joinGame() {
+            playerName = document.getElementById("player-name").value;
+            if (!playerName) {
+                alert("Please enter your name!");
+                return;
+            }
+            document.getElementById("setup-area").style.display = "none";
+            document.getElementById("game-area").style.display = "block";
+            socket.emit("join_game", { game_id: gameId, player_name: playerName });
+            socket.emit("draw_white_cards", { game_id: gameId });
+        }
+
+        function startRound() {
+            socket.emit("start_round", { game_id: gameId });
+        }
+
+        function selectCard(card, index) {
+            if (isCardCzar) {
+                selectedCard = typeof card === 'object' ? card : {text: card, player: null};
+            } else {
+                selectedCard = card;
+            }
+            document.querySelectorAll('.white-card').forEach(c => c.classList.remove('selected'));
+            document.querySelector(`#card-${index}`).classList.add('selected');
+            document.getElementById("submit-button").style.display = !isCardCzar ? "block" : "none";
+            document.getElementById("judge-button").style.display = isCardCzar ? "block" : "none";
+        }
+
+        function submitCard() {
+            if (!selectedCard) return;
+            socket.emit("submit_card", {
+                game_id: gameId,
+                player_name: playerName,
+                white_card: selectedCard
+            });
+            document.getElementById("submit-button").style.display = "none";
+        }
+
+        function judgeRound() {
+            if (!selectedCard || !selectedCard.player) {
+                alert("Please select a card to judge!");
+                return;
+            }
+            socket.emit("judge_round", {
+                game_id: gameId,
+                winner: selectedCard.player,
+                winning_card: selectedCard.text
+            });
+        }
+
+        // Add connection handlers
+        socket.on('connect', () => {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').className = 'connection-status connected';
+            if (playerName) {
+                socket.emit("join_game", { game_id: gameId, player_name: playerName });
+            }
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').className = 'connection-status disconnected';
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            document.getElementById('connection-status').textContent = 'Connection Error';
+            document.getElementById('connection-status').className = 'connection-status error';
+        });
+
+        // Add error handling to existing socket events
+        socket.on("error", function(error) {
+            console.error('Socket error:', error);
+            alert('An error occurred. Please try refreshing the page.');
+        });
+
+        socket.on("update_players", function(players) {
+            const scoresList = Object.entries(players)
+                .map(([name, score]) => `${name}: ${score} points`)
+                .join("<br>");
+            document.getElementById("scores").innerHTML = `<h3>Scores:</h3>${scoresList}`;
+        });
+
+        socket.on("new_round", function(data) {
+            document.getElementById("black-card").innerText = data.black_card;
+            isCardCzar = data.card_czar === playerName;
+            document.getElementById("czar-info").innerText = 
+                isCardCzar ? "You are the Card Czar!" : `Card Czar: ${data.card_czar}`;
+            document.getElementById("start-button").style.display = "none";
+            if (!isCardCzar) {
+                socket.emit("draw_white_cards", { game_id: gameId });
+            }
+        });
+
+        socket.on("white_card_choices", function(data) {
+            const container = document.getElementById("white-cards");
+            container.innerHTML = data.white_cards
+                .map((card, index) => `
+                    <div class="card white-card" id="card-${index}" 
+                         onclick="selectCard('${card}', ${index})">
+                        ${card}
+                    </div>
+                `).join("");
+        });
+
+        socket.on("update_submissions", function(submissions) {
+            if (isCardCzar) {
+                const container = document.getElementById("white-cards");
+                container.innerHTML = Object.entries(submissions)
+                    .map(([player, card], index) => `
+                        <div class="card white-card" id="card-${index}" 
+                             onclick="selectCard({text: '${card}', player: '${player}'}, ${index})">
+                            ${card}
+                        </div>
+                    `).join("");
+            }
+        });
+
+        socket.on("round_winner", function(data) {
+            alert(`${data.winner} wins this round! Score: ${data.score}`);
+            document.getElementById("start-button").style.display = "block";
+            document.getElementById("judge-button").style.display = "none";
+            selectedCard = null;  // Reset selected card
+            
+            // Clear the white cards container
+            const container = document.getElementById("white-cards");
+            container.innerHTML = "";
+        });
+    </script>
 </body>
 </html>
+
+

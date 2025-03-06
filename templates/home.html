@@ -4,14 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cards Against Hu'Manity</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Cards Against Hu'Manity</h1>
-    <form action="/create_game" method="POST">
-        <button type="submit">Create New Game</button>
-    </form>
-    <form action="/join_game" method="GET">
-        <button type="submit">Join Game</button>
-    </form>
+    <div class="container">
+        <h1>Cards Against Hu'Manity</h1>
+
+        <div class="game-controls">
+            <form action="/create_game" method="POST">
+                <button type="submit">Create New Game</button>
+            </form>
+
+            <div class="join-section">
+                <h2>Join Existing Game</h2>
+                <input type="text" id="game-id" placeholder="Enter Game ID">
+                <button onclick="joinGame()">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function joinGame() {
+            let gameId = document.getElementById("game-id").value;
+            if (gameId) {
+                window.location.href = `/game/${gameId}`;
+            } else {
+                alert("Please enter a game ID.");
+            }
+        }
+    </script>
 </body>
 </html>
+
