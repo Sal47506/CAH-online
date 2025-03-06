@@ -12,12 +12,18 @@
     <div class="container mt-5">
         <h1 class="text-center mb-4">Cards Against Hu'Manity</h1>
 
+        <!-- Create Game -->
+        <form action="/create_game" method="POST" class="mb-4">
+            <button type="submit" class="btn btn-primary btn-block">Create New Game</button>
+        </form>
+
         <!-- Join Game -->
-        <div class="join-section mb-4">
+        <form action="/join_game" method="GET" class="mb-4">
+            <input type="text" name="game_id" class="form-control mb-2" placeholder="Enter Game ID" required>
             <input type="text" id="player-name" class="form-control mb-2" placeholder="Enter your name">
             <input type="password" id="api-key" class="form-control mb-2" placeholder="Enter your OpenAI API key (for AI Czar)">
-            <button class="btn btn-primary btn-block" onclick="joinGame()">Join Game</button>
-        </div>
+            <button type="submit" class="btn btn-primary btn-block">Join Game</button>
+        </form>
 
         <!-- AI Czar Toggle -->
         <div class="form-check form-switch mb-4">
@@ -59,24 +65,35 @@
 
         <script>
             const socket = io();
+            const gameId = document.getElementById("game-id").value;
             let playerName = "";
-            let selectedCard = null;
+            let hasJoined = false;
 
             function joinGame() {
+                if (hasJoined) {
+                    alert("You have already joined the game.");
+                    return;
+                }
                 playerName = document.getElementById("player-name").value;
                 const apiKey = document.getElementById("api-key").value;
+                if (!playerName) {
+                    alert("Please enter your name.");
+                    return;
+                }
                 socket.emit("join_game", { 
+                    game_id: gameId,
                     player_name: playerName,
                     api_key: apiKey 
                 });
+                hasJoined = true;
             }
 
             function startRound() {
-                socket.emit("start_round");
+                socket.emit("start_round", { game_id: gameId });
             }
 
             function drawWhiteCards() {
-                socket.emit("draw_white_cards");
+                socket.emit("draw_white_cards", { game_id: gameId });
             }
 
             function submitCard(card) {
@@ -85,15 +102,15 @@
                 }
                 card.classList.add("selected");
                 selectedCard = card;
-                socket.emit("submit_card", { player_name: playerName, white_card: card.textContent });
+                socket.emit("submit_card", { game_id: gameId, player_name: playerName, white_card: card.textContent });
             }
 
             function judgeRound(winner) {
-                socket.emit("judge_round", { winner: winner });
+                socket.emit("judge_round", { game_id: gameId, winner: winner });
             }
 
             function toggleAICzar(enabled) {
-                socket.emit("toggle_ai_czar", { enabled: enabled });
+                socket.emit("toggle_ai_czar", { game_id: gameId, enabled: enabled });
             }
 
             socket.on("update_players", function(players) {

@@ -11,6 +11,7 @@
 <body>
     <div class="container mt-5">
         <h1 class="text-center mb-4">Welcome to Game: {{ game_id }}</h1>
+        <input type="hidden" id="game-id" value="{{ game_id }}">
         <div class="join-section mb-4">
             <input type="text" id="player-name" class="form-control mb-2" placeholder="Enter your name">
             <button class="btn btn-primary btn-block" onclick="joinGame()">Join Game</button>
@@ -24,12 +25,22 @@
 
         <script>
             const socket = io();
-            const gameId = "{{ game_id }}";
+            const gameId = document.getElementById("game-id").value;
             let playerName = "";
+            let hasJoined = false;
 
             function joinGame() {
+                if (hasJoined) {
+                    alert("You have already joined the game.");
+                    return;
+                }
                 playerName = document.getElementById("player-name").value;
+                if (!playerName) {
+                    alert("Please enter your name.");
+                    return;
+                }
                 socket.emit("join_game", { game_id: gameId, player_name: playerName });
+                hasJoined = true;
             }
 
             function startRound() {

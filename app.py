@@ -83,14 +83,20 @@ def game_room(game_id):
 
 @socketio.on("join_game")
 def handle_join_game(data):
+    game_id = data["game_id"]
     player_name = data["player_name"]
     api_key = data.get("api_key", "")
     
-    if player_name not in game_state["players"]:
-        game_state["players"][player_name] = 0
+    if game_id in game_rooms:
+        if player_name in game_rooms[game_id]["players"]:
+            emit("error", {"message": "Player already joined the game."})
+            return
+        
+        game_rooms[game_id]["players"][player_name] = 0
         if api_key:
-            game_state["api_keys"][player_name] = api_key
-        emit("update_players", game_state["players"], broadcast=True)
+            game_rooms[game_id]["api_keys"][player_name] = api_key
+        join_room(game_id)
+        emit("update_players", game_rooms[game_id]["players"], room=game_id)
 
 @socketio.on("start_round")
 def handle_start_round(data):
