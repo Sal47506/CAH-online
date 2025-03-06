@@ -30,7 +30,7 @@ def get_all_black_cards():
     return [card["text"] for pack in packs if "black" in pack for card in pack["black"] if "text" in card]
 
 # Store game rooms
-game_rooms = {}  # Format: {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1}}
+game_rooms = {}  # Format: {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1, "state": "waiting", "disconnected_players": {}, "min_players": 3, "round_timer": None}}
 
 # Generate a unique game ID
 def generate_game_id():
@@ -49,6 +49,10 @@ def create_game():
         "players": {},
         "submissions": {},
         "card_czar": None,
+        "state": "waiting",
+        "disconnected_players": {},
+        "min_players": 3,
+        "round_timer": None
     }
     return redirect(url_for("game_room", game_id=game_id))
 
@@ -69,9 +73,27 @@ def default_error_handler(e):
     emit('error', {'message': 'An error occurred'})
 
 @socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
-    # Clean up any necessary game state here
+def handle_disconnect(*args):
+    sid = request.sid
+    print('Client disconnected:', sid)
+    
+    # Find and remove disconnected player
+    for game_id in game_rooms:
+        for player_name in list(game_rooms[game_id]["players"].keys()):
+            if getattr(request, 'sid_' + player_name, None) == sid:
+                # Store player's score before removing
+                game_rooms[game_id]["disconnected_players"][player_name] = game_rooms[game_id]["players"][player_name]
+                del game_rooms[game_id]["players"][player_name]
+                print(f'Player {player_name} disconnected from game {game_id}')
+                
+                # Notify other players
+                emit("update_players", {
+                    "players": game_rooms[game_id]["players"],
+                    "min_players": game_rooms[game_id]["min_players"],
+                    "state": game_rooms[game_id]["state"],
+                    "disconnected": list(game_rooms[game_id]["disconnected_players"].keys())
+                }, room=game_id)
+                return
 
 # Update existing socket handlers with error handling
 @socketio.on("join_game")
@@ -81,10 +103,31 @@ def handle_join_game(data):
         player_name = data["player_name"]
         
         if game_id in game_rooms:
-            if player_name not in game_rooms[game_id]["players"]:
+            # Store socket ID for this player
+            setattr(request, 'sid_' + player_name, request.sid)
+            
+            # Check if player was previously disconnected
+            if player_name in game_rooms[game_id]["disconnected_players"]:
+                game_rooms[game_id]["players"][player_name] = game_rooms[game_id]["disconnected_players"][player_name]
+                del game_rooms[game_id]["disconnected_players"][player_name]
+            elif player_name not in game_rooms[game_id]["players"]:
                 game_rooms[game_id]["players"][player_name] = 0
-                join_room(game_id)
-            emit("update_players", game_rooms[game_id]["players"], room=game_id)
+            
+            join_room(game_id)
+            emit("update_players", {
+                "players": game_rooms[game_id]["players"],
+                "min_players": game_rooms[game_id]["min_players"],
+                "state": game_rooms[game_id]["state"]
+            }, room=game_id)
+            
+            # Send current game state if game is in progress
+            if game_rooms[game_id]["state"] != "waiting":
+                emit("game_state", {
+                    "black_card": game_rooms[game_id]["black_card"],
+                    "card_czar": game_rooms[game_id]["card_czar"],
+                    "round": game_rooms[game_id]["round"],
+                    "submitted_players": list(game_rooms[game_id]["submissions"].keys())
+                })
         else:
             emit("error", {"message": "Game not found"})
     except Exception as e:
@@ -95,6 +138,13 @@ def handle_join_game(data):
 def handle_start_round(data):
     game_id = data["game_id"]
     if game_id in game_rooms:
+        if len(game_rooms[game_id]["players"]) < game_rooms[game_id]["min_players"]:
+            emit("error", {
+                "message": f"Need at least {game_rooms[game_id]['min_players']} players to start"
+            }, room=game_id)
+            return
+
+        game_rooms[game_id]["state"] = "in_progress"
         game_rooms[game_id]["black_card"] = random.choice(get_all_black_cards())
         game_rooms[game_id]["submissions"] = {}
 
@@ -106,7 +156,8 @@ def handle_start_round(data):
 
         emit("new_round", {
             "black_card": game_rooms[game_id]["black_card"],
-            "card_czar": game_rooms[game_id]["card_czar"]
+            "card_czar": game_rooms[game_id]["card_czar"],
+            "game_started": True
         }, room=game_id)
 
 @socketio.on("draw_white_cards")
@@ -161,6 +212,25 @@ def handle_judge_round(data):
     except Exception as e:
         print(f"Error in judge_round: {str(e)}")
         emit("error", {"message": f"Failed to judge round: {str(e)}"}, room=game_id)
+
+@socketio.on("chat_message")
+def handle_chat_message(data):
+    try:
+        game_id = data.get("game_id")
+        player = data.get("player")
+        message = data.get("message")
+
+        if not all([game_id, player, message]):
+            raise ValueError("Missing required chat data")
+
+        if game_id in game_rooms:
+            emit("chat_message", {
+                "player": player,
+                "message": message
+            }, room=game_id)
+    except Exception as e:
+        print(f"Error in chat_message: {str(e)}")
+        emit("error", {"message": "Failed to send chat message"})
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

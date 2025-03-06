@@ -11,6 +11,7 @@
     <div class="container">
         <div id="connection-status" class="connection-status">Connected</div>
         <h1>Game Room: {{ game_id }}</h1>
+        <button onclick="copyGameId()" class="copy-button">Copy Game ID</button>
         
         <div id="setup-area">
             <input type="text" id="player-name" placeholder="Enter your name">
@@ -18,7 +19,11 @@
         </div>
 
         <div id="game-area" style="display: none;">
-            <div id="scores"></div>
+            <div id="game-info">
+                <div id="scores"></div>
+                <div id="round-info">Round: <span id="round-number">1</span></div>
+                <div id="players-needed"></div>
+            </div>
             
             <div class="black-card" id="black-card">
                 Waiting for game to start...
@@ -26,12 +31,22 @@
 
             <div id="czar-info"></div>
             
-            <div class="card-container" id="white-cards"></div>
+            <div class="card-container" id="white-cards" style="display: none;"></div>
             
             <div id="game-controls">
                 <button onclick="startRound()" id="start-button">Start Round</button>
                 <button onclick="submitCard()" id="submit-button" style="display: none;">Submit Card</button>
                 <button onclick="judgeRound()" id="judge-button" style="display: none;">Select Winner</button>
+            </div>
+
+            <div id="submission-status"></div>
+            <div id="chat-container" class="chat-container">
+                <div id="chat-messages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Type a message..."
+                        onkeypress="if(event.key === 'Enter') sendChat()">
+                    <button onclick="sendChat()">Send</button>
+                </div>
             </div>
         </div>
     </div>
@@ -104,6 +119,25 @@
             });
         }
 
+        function copyGameId() {
+            navigator.clipboard.writeText(gameId).then(() => {
+                alert('Game ID copied to clipboard!');
+            });
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (message && playerName) {
+                socket.emit('chat_message', {
+                    game_id: gameId,
+                    player: playerName,
+                    message: message
+                });
+                input.value = '';
+            }
+        }
+
         // Add connection handlers
         socket.on('connect', () => {
             document.getElementById('connection-status').textContent = 'Connected';
@@ -116,6 +150,7 @@
         socket.on('disconnect', () => {
             document.getElementById('connection-status').textContent = 'Disconnected';
             document.getElementById('connection-status').className = 'connection-status disconnected';
+            socket.emit('disconnect', { player_name: playerName });
         });
 
         socket.on('connect_error', (error) => {
@@ -130,11 +165,38 @@
             alert('An error occurred. Please try refreshing the page.');
         });
 
-        socket.on("update_players", function(players) {
+        socket.on("update_players", function(data) {
+            const { players, min_players, state } = data;
+            const playersNeeded = min_players - Object.keys(players).length;
+            
             const scoresList = Object.entries(players)
-                .map(([name, score]) => `${name}: ${score} points`)
-                .join("<br>");
-            document.getElementById("scores").innerHTML = `<h3>Scores:</h3>${scoresList}`;
+                .map(([name, score]) => `<div class="score-entry">${name}: ${score} points</div>`)
+                .join("");
+            
+            document.getElementById("scores").innerHTML = `
+                <h3>Scores</h3>
+                ${scoresList}
+            `;
+            
+            // Show/hide start button based on player count
+            const canStart = Object.keys(players).length >= min_players;
+            document.getElementById("start-button").disabled = !canStart;
+            
+            if (playersNeeded > 0) {
+                document.getElementById("players-needed").textContent = 
+                    `${playersNeeded} more player${playersNeeded > 1 ? 's' : ''} needed to start`;
+            } else {
+                document.getElementById("players-needed").textContent = 'Ready to start!';
+            }
+        });
+
+        socket.on("chat_message", function(data) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML = `<strong>${data.player}:</strong> ${escapeHtml(data.message)}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         });
 
         socket.on("new_round", function(data) {
@@ -143,6 +205,10 @@
             document.getElementById("czar-info").innerText = 
                 isCardCzar ? "You are the Card Czar!" : `Card Czar: ${data.card_czar}`;
             document.getElementById("start-button").style.display = "none";
+            
+            // Show white cards container only when game starts
+            document.getElementById("white-cards").style.display = "flex";
+            
             if (!isCardCzar) {
                 socket.emit("draw_white_cards", { game_id: gameId });
             }
