@@ -64,14 +64,20 @@
             socket.emit("start_round", { game_id: gameId });
         }
 
-        function selectCard(card, index) {
+        function selectCard(cardElement) {
+            if (!cardElement) return;
+            
             if (isCardCzar) {
-                selectedCard = typeof card === 'object' ? card : {text: card, player: null};
+                selectedCard = {
+                    text: decodeURIComponent(cardElement.dataset.cardText),
+                    player: decodeURIComponent(cardElement.dataset.player || '')
+                };
             } else {
-                selectedCard = card;
+                selectedCard = decodeURIComponent(cardElement.dataset.cardText);
             }
+
             document.querySelectorAll('.white-card').forEach(c => c.classList.remove('selected'));
-            document.querySelector(`#card-${index}`).classList.add('selected');
+            cardElement.classList.add('selected');
             document.getElementById("submit-button").style.display = !isCardCzar ? "block" : "none";
             document.getElementById("judge-button").style.display = isCardCzar ? "block" : "none";
         }
@@ -142,27 +148,47 @@
             }
         });
 
+        // Add this helper function at the top of the script section
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         socket.on("white_card_choices", function(data) {
             const container = document.getElementById("white-cards");
             container.innerHTML = data.white_cards
-                .map((card, index) => `
-                    <div class="card white-card" id="card-${index}" 
-                         onclick="selectCard('${card}', ${index})">
-                        ${card}
-                    </div>
-                `).join("");
+                .map((card, index) => {
+                    const encodedCard = encodeURIComponent(card);
+                    return `
+                        <div class="card white-card" 
+                             id="card-${index}"
+                             data-card-text="${encodedCard}"
+                             onclick="selectCard(this)">
+                            ${card}
+                        </div>
+                    `;
+                }).join("");
         });
 
         socket.on("update_submissions", function(submissions) {
             if (isCardCzar) {
                 const container = document.getElementById("white-cards");
                 container.innerHTML = Object.entries(submissions)
-                    .map(([player, card], index) => `
-                        <div class="card white-card" id="card-${index}" 
-                             onclick="selectCard({text: '${card}', player: '${player}'}, ${index})">
-                            ${card}
-                        </div>
-                    `).join("");
+                    .map(([player, card], index) => {
+                        const encodedCard = encodeURIComponent(card);
+                        const encodedPlayer = encodeURIComponent(player);
+                        return `
+                            <div class="card white-card"
+                                 id="card-${index}"
+                                 data-card-text="${encodedCard}"
+                                 data-player="${encodedPlayer}"
+                                 onclick="selectCard(this)">
+                                ${card}
+                            </div>
+                        `;
+                    }).join("");
+                document.getElementById("judge-button").style.display = "block";
             }
         });
 
