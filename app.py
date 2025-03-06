@@ -17,8 +17,6 @@ load_dotenv()
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
 # Load cards from JSON file
 def get_cards():
     try:
@@ -63,6 +61,7 @@ game_state = {
     "submissions": {},  # Format: {"player_name": "selected_white_card"}
     "card_czar": None,
     "ai_czar": False,
+    "api_keys": {},  # Store API keys for each player
 }
 
 @app.route("/")
@@ -85,8 +84,12 @@ def game_room(game_id):
 @socketio.on("join_game")
 def handle_join_game(data):
     player_name = data["player_name"]
+    api_key = data.get("api_key", "")
+    
     if player_name not in game_state["players"]:
         game_state["players"][player_name] = 0
+        if api_key:
+            game_state["api_keys"][player_name] = api_key
         emit("update_players", game_state["players"], broadcast=True)
 
 @socketio.on("start_round")
@@ -132,25 +135,32 @@ def handle_submit_card(data):
         game_rooms[game_id]["submissions"][player_name] = selected_card
         emit("update_submissions", game_rooms[game_id]["submissions"][player_name], broadcast=True)
 
-def ai_judge_submissions(black_card, submissions):
-    prompt = f"""As a judge in Cards Against Humanity, choose the funniest response.
-    The black card is: "{black_card}"
-    The submitted white cards are:
-    {', '.join([f'"{card}"' for card in submissions.values()])}
+def ai_judge_submissions(black_card, submissions, api_key):
+    if not api_key:
+        return None, "No API key provided for AI Czar"
     
-    Pick the winner and explain why it's the funniest in one sentence.
-    Response format: winning_card|explanation"""
-    
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=100,
-        temperature=0.7
-    )
-    
-    winner_card, explanation = response.choices[0].text.strip().split('|')
-    winner = [player for player, card in submissions.items() if card == winner_card.strip()][0]
-    return winner, explanation
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        prompt = f"""As a judge in Cards Against Humanity, choose the funniest response.
+        The black card is: "{black_card}"
+        The submitted white cards are:
+        {', '.join([f'"{card}"' for card in submissions.values()])}
+        
+        Pick the winner and explain why it's the funniest in one sentence.
+        Response format: winning_card|explanation"""
+        
+        response = client.completions.create(
+            model="gpt-4-turbo",
+            prompt=prompt,
+            max_tokens=100,
+            temperature=0.7
+        )
+        
+        winner_card, explanation = response.choices[0].text.strip().split('|')
+        winner = [player for player, card in submissions.items() if card == winner_card.strip()][0]
+        return winner, explanation
+    except Exception as e:
+        return None, f"AI Czar error: {str(e)}"
 
 @socketio.on("judge_round")
 def handle_judge_round(data):
@@ -158,10 +168,19 @@ def handle_judge_round(data):
     
     if game_id in game_rooms:
         if game_rooms[game_id]["ai_czar"]:
+            # Get API key of the player who enabled AI Czar
+            current_czar = game_rooms[game_id]["card_czar"]
+            api_key = game_state["api_keys"].get(current_czar, "")
+            
             winner, explanation = ai_judge_submissions(
                 game_rooms[game_id]["black_card"],
-                game_rooms[game_id]["submissions"]
+                game_rooms[game_id]["submissions"],
+                api_key
             )
+            
+            if not winner:
+                emit("error", {"message": explanation}, room=game_id)
+                return
         else:
             winner = data["winner"]
             explanation = None
