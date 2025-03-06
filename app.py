@@ -69,10 +69,17 @@ def home():
     print("Launching index.html")  # Debugging print
     return render_template("index.html")
 
-@app.route("/create_game")
+@app.route("/create_game", methods=["POST"])
 def create_game():
     game_id = generate_game_id()
     game_rooms[game_id] = game_state.copy()
+    return redirect(url_for("game_room", game_id=game_id))
+
+@app.route("/join_game", methods=["GET"])
+def join_game():
+    game_id = request.args.get("game_id")
+    if game_id not in game_rooms:
+        return "Game not found", 404
     return redirect(url_for("game_room", game_id=game_id))
 
 @app.route("/game/<game_id>")
