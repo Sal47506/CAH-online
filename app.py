@@ -30,7 +30,7 @@ def get_all_black_cards():
     return [card["text"] for pack in packs if "black" in pack for card in pack["black"] if "text" in card]
 
 # Store game rooms
-game_rooms = {}  # Format: {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1, "state": "waiting", "disconnected_players": {}, "min_players": 3, "round_timer": None}}
+game_rooms = {}  # Format: {"ABC123": {"players": {}, "black_card": None, "submissions": {}, "card_czar": None, "round": 1, "state": "waiting", "disconnected_players": {}, "min_players": 3, "round_timer": None, "ready_players": set(), "player_hands": {}}}
 
 # Generate a unique game ID
 def generate_game_id():
@@ -52,7 +52,9 @@ def create_game():
         "state": "waiting",
         "disconnected_players": {},
         "min_players": 3,
-        "round_timer": None
+        "round_timer": None,
+        "ready_players": set(),  # Add ready players tracking
+        "player_hands": {}      # Add player hands tracking
     }
     return redirect(url_for("game_room", game_id=game_id))
 
@@ -231,6 +233,39 @@ def handle_chat_message(data):
     except Exception as e:
         print(f"Error in chat_message: {str(e)}")
         emit("error", {"message": "Failed to send chat message"})
+
+@socketio.on("player_ready")
+def handle_player_ready(data):
+    try:
+        game_id = data["game_id"]
+        player_name = data["player_name"]
+        is_ready = data.get("is_ready", True)
+        
+        if game_id in game_rooms:
+            if is_ready:
+                game_rooms[game_id]["ready_players"].add(player_name)
+            else:
+                game_rooms[game_id]["ready_players"].discard(player_name)
+            
+            all_ready = len(game_rooms[game_id]["ready_players"]) == len(game_rooms[game_id]["players"])
+            
+            emit("update_ready_players", {
+                "ready_players": list(game_rooms[game_id]["ready_players"]),
+                "all_ready": all_ready
+            }, room=game_id)
+
+    except Exception as e:
+        print(f"Error in player_ready: {str(e)}")
+        emit("error", {"message": "Failed to set player ready status"})
+
+@socketio.on("status_message")
+def handle_status_message(data):
+    try:
+        game_id = data["game_id"]
+        message = data["message"]
+        emit("status_message", {"message": message}, room=game_id)
+    except Exception as e:
+        print(f"Error in status_message: {str(e)}")
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

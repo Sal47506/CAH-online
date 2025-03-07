@@ -19,6 +19,7 @@
         </div>
 
         <div id="game-area" style="display: none;">
+            <div id="game-status" class="game-status"></div>
             <div id="game-info">
                 <div id="scores"></div>
                 <div id="round-info">Round: <span id="round-number">1</span></div>
@@ -37,14 +38,14 @@
                 <button onclick="startRound()" id="start-button">Start Round</button>
                 <button onclick="submitCard()" id="submit-button" style="display: none;">Submit Card</button>
                 <button onclick="judgeRound()" id="judge-button" style="display: none;">Select Winner</button>
+                <button onclick="toggleReady()" id="ready-button">Ready</button>
             </div>
 
-            <div id="submission-status"></div>
             <div id="chat-container" class="chat-container">
                 <div id="chat-messages"></div>
                 <div class="chat-input-area">
                     <input type="text" id="chat-input" placeholder="Type a message..."
-                        onkeypress="if(event.key === 'Enter') sendChat()">
+                           onkeypress="if(event.key === 'Enter') sendChat()">
                     <button onclick="sendChat()">Send</button>
                 </div>
             </div>
@@ -62,6 +63,7 @@
         let playerName = "";
         let isCardCzar = false;
         let selectedCard = null;
+        let isReady = false;
 
         function joinGame() {
             playerName = document.getElementById("player-name").value;
@@ -138,6 +140,19 @@
             }
         }
 
+        function toggleReady() {
+            isReady = !isReady;
+            const readyButton = document.getElementById("ready-button");
+            readyButton.textContent = isReady ? "Unready" : "Ready";
+            readyButton.className = `ready-button ${isReady ? 'ready' : ''}`;
+            
+            socket.emit("player_ready", {
+                game_id: gameId,
+                player_name: playerName,
+                is_ready: isReady
+            });
+        }
+
         // Add connection handlers
         socket.on('connect', () => {
             document.getElementById('connection-status').textContent = 'Connected';
@@ -170,11 +185,17 @@
             const playersNeeded = min_players - Object.keys(players).length;
             
             const scoresList = Object.entries(players)
-                .map(([name, score]) => `<div class="score-entry">${name}: ${score} points</div>`)
-                .join("");
+                .map(([name, score]) => `
+                    <div class="score-entry panel-block" data-player="${name}">
+                        <span class="panel-icon">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        ${name}: ${score} points
+                    </div>
+                `).join("");
             
             document.getElementById("scores").innerHTML = `
-                <h3>Scores</h3>
+                <p class="panel-heading">Scores</p>
                 ${scoresList}
             `;
             
@@ -259,6 +280,11 @@
         });
 
         socket.on("round_winner", function(data) {
+            const winnerCard = document.querySelector(`[data-player="${data.winner}"]`);
+            if (winnerCard) {
+                winnerCard.classList.add('winner-animation');
+                setTimeout(() => winnerCard.classList.remove('winner-animation'), 3000);
+            }
             alert(`${data.winner} wins this round! Score: ${data.score}`);
             document.getElementById("start-button").style.display = "block";
             document.getElementById("judge-button").style.display = "none";
@@ -267,6 +293,39 @@
             // Clear the white cards container
             const container = document.getElementById("white-cards");
             container.innerHTML = "";
+        });
+
+        socket.on("update_ready_players", function(data) {
+            const { ready_players, all_ready } = data;
+            
+            // Update player list to show ready status
+            document.querySelectorAll('.score-entry').forEach(entry => {
+                const playerName = entry.getAttribute('data-player');
+                entry.classList.toggle('has-text-success', ready_players.includes(playerName));
+                entry.classList.toggle('has-text-weight-bold', ready_players.includes(playerName));
+            });
+
+            if (all_ready) {
+                const status = document.getElementById("game-status");
+                status.textContent = "All players ready!";
+                status.style.display = "block";
+                status.classList.add('notification', 'is-success', 'is-light');
+                
+                setTimeout(() => {
+                    status.style.display = "none";
+                    status.classList.remove('is-success');
+                }, 3000);
+            }
+        });
+
+        socket.on("status_message", function(data) {
+            const status = document.getElementById("game-status");
+            status.textContent = data.message;
+            status.classList.add('is-active');
+            
+            setTimeout(() => {
+                status.classList.remove('is-active');
+            }, 3000);
         });
     </script>
 </body>
