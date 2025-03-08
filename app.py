@@ -165,10 +165,34 @@ def handle_start_round(data):
 @socketio.on("draw_white_cards")
 def handle_draw_white_cards(data):
     game_id = data["game_id"]
+    player_name = data.get("player_name")
+    
     if game_id in game_rooms:
-        for player_name in game_rooms[game_id]["players"]:
-            game_rooms[game_id]["player_hands"][player_name] = random.sample(get_all_white_cards(), 5)
-        emit("update_player_hands", game_rooms[game_id]["player_hands"], room=game_id)
+        # Initialize player_hands if not exists
+        if "player_hands" not in game_rooms[game_id]:
+            game_rooms[game_id]["player_hands"] = {}
+        
+        # Initialize used_cards if not exists
+        if "used_cards" not in game_rooms[game_id]:
+            game_rooms[game_id]["used_cards"] = set()
+            
+        all_white_cards = get_all_white_cards()
+        available_cards = [card for card in all_white_cards if card not in game_rooms[game_id]["used_cards"]]
+        
+        # If we're running low on cards, reset the used cards
+        if len(available_cards) < 5:
+            game_rooms[game_id]["used_cards"].clear()
+            available_cards = all_white_cards
+            
+        # Draw 5 unique cards for the player
+        new_cards = random.sample(available_cards, 5)
+        game_rooms[game_id]["player_hands"][player_name] = new_cards
+        game_rooms[game_id]["used_cards"].update(new_cards)
+        
+        # Only send cards to the requesting player
+        emit("white_card_choices", {
+            "white_cards": new_cards
+        }, room=request.sid)
 
 @socketio.on("submit_card")
 def handle_submit_card(data):

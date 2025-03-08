@@ -74,7 +74,10 @@
             document.getElementById("setup-area").style.display = "none";
             document.getElementById("game-area").style.display = "block";
             socket.emit("join_game", { game_id: gameId, player_name: playerName });
-            socket.emit("draw_white_cards", { game_id: gameId });
+            socket.emit("draw_white_cards", { 
+                game_id: gameId,
+                player_name: playerName 
+            });
         }
 
         function startRound() {
@@ -231,7 +234,10 @@
             document.getElementById("white-cards").style.display = "flex";
             
             if (!isCardCzar) {
-                socket.emit("draw_white_cards", { game_id: gameId });
+                socket.emit("draw_white_cards", { 
+                    game_id: gameId,
+                    player_name: playerName 
+                });
             }
         });
 
