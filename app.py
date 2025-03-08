@@ -166,8 +166,9 @@ def handle_start_round(data):
 def handle_draw_white_cards(data):
     game_id = data["game_id"]
     if game_id in game_rooms:
-        white_cards = random.sample(get_all_white_cards(), 5)
-        emit("white_card_choices", {"white_cards": white_cards}, room=game_id)
+        for player_name in game_rooms[game_id]["players"]:
+            game_rooms[game_id]["player_hands"][player_name] = random.sample(get_all_white_cards(), 5)
+        emit("update_player_hands", game_rooms[game_id]["player_hands"], room=game_id)
 
 @socketio.on("submit_card")
 def handle_submit_card(data):
