@@ -3,9 +3,15 @@ from flask_socketio import SocketIO, emit, join_room
 import json
 import random
 import string
+from database import init_db, save_game, load_game, delete_old_games
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Initialize database and clean old games at startup
+with app.app_context():
+    init_db()
+    delete_old_games()
 
 # Load cards from JSON file
 def get_cards():
@@ -43,7 +49,7 @@ def home():
 @app.route("/create_game", methods=["POST"])
 def create_game():
     game_id = generate_game_id()
-    game_rooms[game_id] = {
+    game_data = {
         "round": 1,
         "black_card": None,
         "players": {},
@@ -53,21 +59,28 @@ def create_game():
         "disconnected_players": {},
         "min_players": 3,
         "round_timer": None,
-        "ready_players": set(),  # Add ready players tracking
-        "player_hands": {},      # Add player hands tracking
-        "score_limit": 8,           # Points needed to win
-        "round_time_limit": 120,    # Seconds per round
-        "round_timer": None,
-        "spectators": set(),        # Store spectators
-        "used_cards": set(),        # Track used cards
-        "game_winner": None         # Store game winner
+        "ready_players": [],  # Changed from set() to []
+        "player_hands": {},
+        "score_limit": 8,
+        "round_time_limit": 120,
+        "spectators": [],  # Changed from set() to []
+        "used_cards": [],  # Changed from set() to []
+        "game_winner": None
     }
+    
+    game_rooms[game_id] = game_data
+    save_game(game_id, game_data)
     return redirect(url_for("game_room", game_id=game_id))
 
 @app.route("/game/<game_id>")
 def game_room(game_id):
+    # Try to load game from database if not in memory
     if game_id not in game_rooms:
-        return "Game not found", 404
+        game_data = load_game(game_id)
+        if game_data:
+            game_rooms[game_id] = game_data
+        else:
+            return "Game not found", 404
     return render_template("game.html", game_id=game_id)
 
 @socketio.on_error()
@@ -136,6 +149,10 @@ def handle_join_game(data):
                     "round": game_rooms[game_id]["round"],
                     "submitted_players": list(game_rooms[game_id]["submissions"].keys())
                 })
+            
+            # Save game state after player joins
+            save_game(game_id, game_rooms[game_id])
+            
         else:
             emit("error", {"message": "Game not found"})
     except Exception as e:
@@ -192,7 +209,7 @@ def handle_draw_white_cards(data):
         
         # Initialize used_cards if not exists
         if "used_cards" not in game_rooms[game_id]:
-            game_rooms[game_id]["used_cards"] = set()
+            game_rooms[game_id]["used_cards"] = []
             
         all_white_cards = get_all_white_cards()
         available_cards = [card for card in all_white_cards if card not in game_rooms[game_id]["used_cards"]]
@@ -206,7 +223,8 @@ def handle_draw_white_cards(data):
         if player_name != card_czar:
             new_cards = random.sample(available_cards, 5)
             game_rooms[game_id]["player_hands"][player_name] = new_cards
-            game_rooms[game_id]["used_cards"].update(new_cards)
+            game_rooms[game_id]["used_cards"].extend([card for card in new_cards 
+                                                    if card not in game_rooms[game_id]["used_cards"]])
         
         # Only send cards to the requesting player
         emit("white_card_choices", {
@@ -268,6 +286,9 @@ def handle_judge_round(data):
             "round": game_rooms[game_id]["round"],
             "state": game_rooms[game_id]["state"]
         }, room=game_id)
+        
+        # Save game state after round ends
+        save_game(game_id, game_rooms[game_id])
 
     except Exception as e:
         print(f"Error in judge_round: {str(e)}")
@@ -300,15 +321,21 @@ def handle_player_ready(data):
         is_ready = data.get("is_ready", True)
         
         if game_id in game_rooms:
-            if is_ready:
-                game_rooms[game_id]["ready_players"].add(player_name)
-            else:
-                game_rooms[game_id]["ready_players"].discard(player_name)
+            ready_players = game_rooms[game_id]["ready_players"]
+            if isinstance(ready_players, set):
+                ready_players = list(ready_players)
+                
+            if is_ready and player_name not in ready_players:
+                ready_players.append(player_name)
+            elif not is_ready and player_name in ready_players:
+                ready_players.remove(player_name)
+                
+            game_rooms[game_id]["ready_players"] = ready_players
             
-            all_ready = len(game_rooms[game_id]["ready_players"]) == len(game_rooms[game_id]["players"])
+            all_ready = len(ready_players) == len(game_rooms[game_id]["players"])
             
             emit("update_ready_players", {
-                "ready_players": list(game_rooms[game_id]["ready_players"]),
+                "ready_players": ready_players,
                 "all_ready": all_ready
             }, room=game_id)
 
