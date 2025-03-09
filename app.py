@@ -54,7 +54,13 @@ def create_game():
         "min_players": 3,
         "round_timer": None,
         "ready_players": set(),  # Add ready players tracking
-        "player_hands": {}      # Add player hands tracking
+        "player_hands": {},      # Add player hands tracking
+        "score_limit": 8,           # Points needed to win
+        "round_time_limit": 120,    # Seconds per round
+        "round_timer": None,
+        "spectators": set(),        # Store spectators
+        "used_cards": set(),        # Track used cards
+        "game_winner": None         # Store game winner
     }
     return redirect(url_for("game_room", game_id=game_id))
 
@@ -143,6 +149,14 @@ def handle_start_round(data):
         if len(game_rooms[game_id]["players"]) < game_rooms[game_id]["min_players"]:
             emit("error", {
                 "message": f"Need at least {game_rooms[game_id]['min_players']} players to start"
+            }, room=game_id)
+            return
+            
+        # Check if all players are ready
+        all_ready = len(game_rooms[game_id]["ready_players"]) == len(game_rooms[game_id]["players"])
+        if not all_ready:
+            emit("error", {
+                "message": "All players must be ready to start"
             }, room=game_id)
             return
 
@@ -235,26 +249,23 @@ def handle_judge_round(data):
         if game_id not in game_rooms:
             raise ValueError("Game not found")
 
-        if winner not in game_rooms[game_id]["players"]:
-            raise ValueError("Winner not found in game")
-
-        # Update winner's score
+        # Update game state
         game_rooms[game_id]["players"][winner] += 1
-        game_rooms[game_id]["round"] += 1
-        game_rooms[game_id]["submissions"] = {}  # Clear submissions for next round
+        game_rooms[game_id]["round"] += 1  # Increment round number
+        game_rooms[game_id]["submissions"] = {}
 
-        # First emit round winner
+        # Emit round winner with updated round number
         emit("round_winner", {
             "winner": winner,
             "winning_card": winning_card,
             "score": game_rooms[game_id]["players"][winner],
-            "round": game_rooms[game_id]["round"]
+            "round": game_rooms[game_id]["round"]  # Include round number
         }, room=game_id)
 
-        # Then broadcast updated scores to all players
-        emit("update_players", {
+        # Update all players with new game state
+        emit("update_game_state", {
             "players": game_rooms[game_id]["players"],
-            "min_players": game_rooms[game_id]["min_players"],
+            "round": game_rooms[game_id]["round"],
             "state": game_rooms[game_id]["state"]
         }, room=game_id)
 
@@ -313,6 +324,28 @@ def handle_status_message(data):
         emit("status_message", {"message": message}, room=game_id)
     except Exception as e:
         print(f"Error in status_message: {str(e)}")
+
+@socketio.on("check_game_end")
+def check_game_end(game_id):
+    if game_id in game_rooms:
+        for player, score in game_rooms[game_id]["players"].items():
+            if score >= game_rooms[game_id]["score_limit"]:
+                game_rooms[game_id]["game_winner"] = player
+                emit("game_over", {
+                    "winner": player,
+                    "final_scores": game_rooms[game_id]["players"]
+                }, room=game_id)
+                return True
+    return False
+
+@socketio.on("join_as_spectator")
+def handle_spectator(data):
+    game_id = data["game_id"]
+    spectator_name = data["spectator_name"]
+    if game_id in game_rooms:
+        game_rooms[game_id]["spectators"].add(spectator_name)
+        join_room(game_id)
+        emit("spectator_joined", {"name": spectator_name}, room=game_id)
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

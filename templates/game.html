@@ -19,6 +19,9 @@
         </div>
 
         <div id="game-area" style="display: none;">
+            <div id="victory-screen" class="victory-screen" style="display: none;"></div>
+            <div id="timer-bar" class="timer-bar"></div>
+            <div id="timer-display" class="timer-display">Time left: <span id="time-left">120</span>s</div>
             <div id="game-status" class="game-status"></div>
             <div id="game-info">
                 <div id="scores"></div>
@@ -49,6 +52,12 @@
                     <button onclick="sendChat()">Send</button>
                 </div>
             </div>
+
+            <div id="quick-chat">
+                <button onclick="sendQuickChat('Good card!')" class="quick-chat-btn">👍 Good card!</button>
+                <button onclick="sendQuickChat('Hurry up!')" class="quick-chat-btn">⏰ Hurry up!</button>
+                <button onclick="sendQuickChat('LOL')" class="quick-chat-btn">😄 LOL</button>
+            </div>
         </div>
     </div>
 
@@ -64,6 +73,7 @@
         let isCardCzar = false;
         let selectedCard = null;
         let isReady = false;
+        let roundTimer = null;
 
         function joinGame() {
             playerName = document.getElementById("player-name").value;
@@ -156,6 +166,57 @@
             });
         }
 
+        function startTimer(duration) {
+            let timeLeft = duration;
+            const timerBar = document.getElementById('timer-bar');
+            const timeLeftDisplay = document.getElementById('time-left');
+            
+            clearInterval(roundTimer);
+            roundTimer = setInterval(() => {
+                timeLeft--;
+                const percentage = (timeLeft / duration) * 100;
+                timerBar.style.width = percentage + '%';
+                timeLeftDisplay.textContent = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(roundTimer);
+                    if (isCardCzar) {
+                        autoSelectWinner();
+                    } else {
+                        autoSubmitCard();
+                    }
+                }
+            }, 1000);
+        }
+
+        function autoSubmitCard() {
+            if (!selectedCard) {
+                const cards = document.querySelectorAll('.white-card');
+                if (cards.length > 0) {
+                    selectCard(cards[0]);
+                    submitCard();
+                }
+            }
+        }
+
+        function autoSelectWinner() {
+            if (isCardCzar && !selectedCard) {
+                const submissions = document.querySelectorAll('.white-card');
+                if (submissions.length > 0) {
+                    selectCard(submissions[0]);
+                    judgeRound();
+                }
+            }
+        }
+
+        function sendQuickChat(message) {
+            socket.emit('chat_message', {
+                game_id: gameId,
+                player: playerName,
+                message: message
+            });
+        }
+
         // Add connection handlers
         socket.on('connect', () => {
             document.getElementById('connection-status').textContent = 'Connected';
@@ -229,6 +290,8 @@
             document.getElementById("czar-info").innerText = 
                 isCardCzar ? "You are the Card Czar!" : `Card Czar: ${data.card_czar}`;
             document.getElementById("start-button").style.display = "none";
+            document.getElementById("ready-button").style.display = "none";
+            startTimer(120); // Start 120 second timer
             
             // Only draw cards for non-czar players
             if (!isCardCzar) {
@@ -318,6 +381,9 @@
                 `;
             }
             
+            // Update round number display
+            document.getElementById("round-number").textContent = data.round;
+            
             alert(`${data.winner} wins this round! Score: ${data.score}`);
             document.getElementById("start-button").style.display = "block";
             document.getElementById("judge-button").style.display = "none";
@@ -326,6 +392,7 @@
             // Clear the white cards container
             const container = document.getElementById("white-cards");
             container.innerHTML = "";
+            clearInterval(roundTimer);
         });
 
         socket.on("update_ready_players", function(data) {
@@ -334,19 +401,22 @@
             // Update player list to show ready status
             document.querySelectorAll('.score-entry').forEach(entry => {
                 const playerName = entry.getAttribute('data-player');
-                entry.classList.toggle('has-text-success', ready_players.includes(playerName));
-                entry.classList.toggle('has-text-weight-bold', ready_players.includes(playerName));
+                if (ready_players.includes(playerName)) {
+                    entry.classList.add('ready-player');
+                } else {
+                    entry.classList.remove('ready-player');
+                }
             });
 
             if (all_ready) {
                 const status = document.getElementById("game-status");
                 status.textContent = "All players ready!";
                 status.style.display = "block";
-                status.classList.add('notification', 'is-success', 'is-light');
+                status.classList.add('is-active');
                 
                 setTimeout(() => {
                     status.style.display = "none";
-                    status.classList.remove('is-success');
+                    status.classList.remove('is-active');
                 }, 3000);
             }
         });
@@ -359,6 +429,32 @@
             setTimeout(() => {
                 status.classList.remove('is-active');
             }, 3000);
+        });
+
+        socket.on('game_over', function(data) {
+            const victoryScreen = document.getElementById('victory-screen');
+            victoryScreen.innerHTML = `
+                <h2>${data.winner} Wins!</h2>
+                <div class="final-scores">
+                    ${Object.entries(data.final_scores)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([name, score]) => `
+                            <div class="score-entry ${name === data.winner ? 'winner' : ''}">
+                                ${name}: ${score} points
+                            </div>
+                        `).join('')}
+                </div>
+                <button onclick="location.reload()">Play Again</button>
+            `;
+            victoryScreen.style.display = 'flex';
+        });
+
+        socket.on("update_game_state", function(data) {
+            // Update round number
+            document.getElementById("round-number").textContent = data.round;
+            
+            // Update other game state elements
+            // ...rest of update logic...
         });
     </script>
 </body>
