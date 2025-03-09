@@ -166,6 +166,10 @@ def handle_start_round(data):
 def handle_draw_white_cards(data):
     game_id = data["game_id"]
     player_name = data.get("player_name")
+    card_czar = data.get("card_czar")
+
+    if player_name == card_czar:
+        return
     
     if game_id in game_rooms:
         # Initialize player_hands if not exists
@@ -185,9 +189,10 @@ def handle_draw_white_cards(data):
             available_cards = all_white_cards
             
         # Draw 5 unique cards for the player
-        new_cards = random.sample(available_cards, 5)
-        game_rooms[game_id]["player_hands"][player_name] = new_cards
-        game_rooms[game_id]["used_cards"].update(new_cards)
+        if player_name != card_czar:
+            new_cards = random.sample(available_cards, 5)
+            game_rooms[game_id]["player_hands"][player_name] = new_cards
+            game_rooms[game_id]["used_cards"].update(new_cards)
         
         # Only send cards to the requesting player
         emit("white_card_choices", {
@@ -196,13 +201,26 @@ def handle_draw_white_cards(data):
 
 @socketio.on("submit_card")
 def handle_submit_card(data):
-    game_id = data["game_id"]
-    player_name = data["player_name"]
-    selected_card = data["white_card"]
+    try:
+        game_id = data["game_id"]
+        player_name = data["player_name"]
+        selected_card = data["white_card"]
 
-    if game_id in game_rooms and player_name in game_rooms[game_id]["players"]:
-        game_rooms[game_id]["submissions"][player_name] = selected_card
-        emit("update_submissions", game_rooms[game_id]["submissions"], room=game_id)
+        if game_id in game_rooms and player_name in game_rooms[game_id]["players"]:
+            # Store the submission
+            game_rooms[game_id]["submissions"][player_name] = selected_card
+            
+            # Broadcast submissions to all players (card czar will filter on client side)
+            emit("update_submissions", {
+                "submissions": game_rooms[game_id]["submissions"],
+                "card_czar": game_rooms[game_id]["card_czar"]
+            }, room=game_id)
+            
+            print(f"Submission received from {player_name}: {selected_card}")
+            print(f"Current submissions: {game_rooms[game_id]['submissions']}")
+    except Exception as e:
+        print(f"Error in submit_card: {str(e)}")
+        emit("error", {"message": "Failed to submit card"})
 
 @socketio.on("judge_round")
 def handle_judge_round(data):
@@ -234,7 +252,11 @@ def handle_judge_round(data):
         }, room=game_id)
 
         # Then broadcast updated scores to all players
-        emit("update_players", game_rooms[game_id]["players"], room=game_id)
+        emit("update_players", {
+            "players": game_rooms[game_id]["players"],
+            "min_players": game_rooms[game_id]["min_players"],
+            "state": game_rooms[game_id]["state"]
+        }, room=game_id)
 
     except Exception as e:
         print(f"Error in judge_round: {str(e)}")

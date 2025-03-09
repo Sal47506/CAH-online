@@ -230,14 +230,15 @@
                 isCardCzar ? "You are the Card Czar!" : `Card Czar: ${data.card_czar}`;
             document.getElementById("start-button").style.display = "none";
             
-            // Show white cards container only when game starts
-            document.getElementById("white-cards").style.display = "flex";
-            
+            // Only draw cards for non-czar players
             if (!isCardCzar) {
                 socket.emit("draw_white_cards", { 
                     game_id: gameId,
-                    player_name: playerName 
+                    player_name: playerName
                 });
+                document.getElementById("white-cards").style.display = "flex";
+            } else {
+                document.getElementById("white-cards").style.display = "none";
             }
         });
 
@@ -264,10 +265,22 @@
                 }).join("");
         });
 
-        socket.on("update_submissions", function(submissions) {
+        socket.on("update_submissions", function(data) {
+            console.log("Received submissions update:", data);
             if (isCardCzar) {
                 const container = document.getElementById("white-cards");
-                container.innerHTML = Object.entries(submissions)
+                const submissions = data.submissions;
+                
+                // Randomize the order of submissions
+                const submissionEntries = Object.entries(submissions);
+                for (let i = submissionEntries.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [submissionEntries[i], submissionEntries[j]] = [submissionEntries[j], submissionEntries[i]];
+                }
+                
+                // Display submissions for card czar
+                container.style.display = "flex";
+                container.innerHTML = submissionEntries
                     .map(([player, card], index) => {
                         const encodedCard = encodeURIComponent(card);
                         const encodedPlayer = encodeURIComponent(player);
@@ -281,7 +294,9 @@
                             </div>
                         `;
                     }).join("");
-                document.getElementById("judge-button").style.display = "block";
+                    
+                document.getElementById("judge-button").style.display = 
+                    Object.keys(submissions).length === Object.keys(players).length - 1 ? "block" : "none";
             }
         });
 
@@ -291,6 +306,18 @@
                 winnerCard.classList.add('winner-animation');
                 setTimeout(() => winnerCard.classList.remove('winner-animation'), 3000);
             }
+            
+            // Update the winner's score immediately in the UI
+            const winnerScoreEntry = document.querySelector(`[data-player="${data.winner}"]`);
+            if (winnerScoreEntry) {
+                winnerScoreEntry.innerHTML = `
+                    <span class="panel-icon">
+                        <i class="fas fa-user"></i>
+                    </span>
+                    ${data.winner}: ${data.score} points
+                `;
+            }
+            
             alert(`${data.winner} wins this round! Score: ${data.score}`);
             document.getElementById("start-button").style.display = "block";
             document.getElementById("judge-button").style.display = "none";
