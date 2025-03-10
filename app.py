@@ -112,6 +112,10 @@ def game_room(game_id):
             return "Game not found", 404
     return render_template("game.html", game_id=game_id)
 
+@app.route("/health")
+def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}, 200
+
 @socketio.on_error()
 def error_handler(e):
     print('An error has occurred:', e)
