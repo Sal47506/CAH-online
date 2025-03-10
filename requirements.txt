@@ -2,10 +2,10 @@ flask>=2.0.0
 flask-socketio>=5.3.0
 python-socketio>=5.7.0
 python-engineio>=4.3.0
-requests
-werkzeug
-python-dotenv
-gunicorn>=20.1.0
+requests>=2.31.0
+werkzeug>=2.3.0
+python-dotenv>=1.0.0
+gunicorn>=21.2.0
 eventlet>=0.33.0
-dnspython
-greenlet>=2.0.0
+redis>=5.0.1
+dnspython>=2.4.0

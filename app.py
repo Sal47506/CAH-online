@@ -1,3 +1,6 @@
+import gevent.monkey
+gevent.monkey.patch_all()
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -23,11 +26,14 @@ def get_cloudflare_ips():
     except:
         return []
 
-# Load environment variables
-load_dotenv()
+# Load environment variables only in development
+if os.getenv('FLASK_ENV') != 'production':
+    load_dotenv('.env.local')
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+app.config['PROPAGATE_EXCEPTIONS'] = True
+app.config['JSON_SORT_KEYS'] = False
 # Add Cloudflare configuration
 app.config['CLOUDFLARE_IPS'] = get_cloudflare_ips()
 app.wsgi_app = ProxyFix(
@@ -41,15 +47,18 @@ app.wsgi_app = ProxyFix(
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    ping_timeout=60,
-    ping_interval=25,
+    ping_timeout=60000,
+    ping_interval=25000,
     async_mode='eventlet',
     manage_session=False,
     logger=True,
     engineio_logger=True,
-    message_queue=None,
+    message_queue=os.getenv('REDIS_URL', None),
     max_http_buffer_size=1000000,
-    transports=['websocket']
+    transports=['websocket'],
+    websocket_ping_interval=25,
+    websocket_ping_timeout=60,
+    always_connect=True
 )
 
 # Initialize database and clean old games at startup
