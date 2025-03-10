@@ -93,7 +93,8 @@ def create_game():
         "round_time_limit": 120,
         "spectators": [],  # Changed from set() to []
         "used_cards": [],  # Changed from set() to []
-        "game_winner": None
+        "game_winner": None,
+        "max_rounds": 10,  # Add max rounds limit
     }
     
     game_rooms[game_id] = game_data
@@ -299,6 +300,18 @@ def handle_judge_round(data):
         game_rooms[game_id]["players"][winner] += 1
         game_rooms[game_id]["round"] += 1  # Increment round number
         game_rooms[game_id]["submissions"] = {}
+
+        # Check if we've reached max rounds
+        if game_rooms[game_id]["round"] > game_rooms[game_id]["max_rounds"]:
+            # Find the winner
+            winner = max(game_rooms[game_id]["players"].items(), key=lambda x: x[1])[0]
+            game_rooms[game_id]["game_winner"] = winner
+            emit("game_over", {
+                "winner": winner,
+                "final_scores": game_rooms[game_id]["players"],
+                "reason": "Maximum rounds reached"
+            }, room=game_id)
+            return
 
         # Emit round winner with updated round number
         emit("round_winner", {
