@@ -1,9 +1,7 @@
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch(os=True, select=True, socket=True, thread=True, time=True)
 
 from app import app, socketio
-
-application = app
 
 if __name__ == "__main__":
     socketio.run(

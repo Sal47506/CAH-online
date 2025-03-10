@@ -1,6 +1,3 @@
-import eventlet
-eventlet.monkey_patch(socket=True, select=True)
-
 from flask import Flask, render_template, request, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
 import json
@@ -12,17 +9,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from dotenv import load_dotenv
 from datetime import datetime
-
-# Initialize app before other imports
-app = Flask(__name__)
-
-# Load environment variables
-load_dotenv()
-
-# Configure Flask
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
-app.config['PROPAGATE_EXCEPTIONS'] = True
-app.config['JSON_SORT_KEYS'] = False
+import eventlet
+eventlet.monkey_patch()
 
 # Get Cloudflare IP ranges
 def get_cloudflare_ips():
@@ -34,6 +22,11 @@ def get_cloudflare_ips():
     except:
         return []
 
+# Load environment variables
+load_dotenv()
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
 # Add Cloudflare configuration
 app.config['CLOUDFLARE_IPS'] = get_cloudflare_ips()
 app.wsgi_app = ProxyFix(
@@ -44,20 +37,18 @@ app.wsgi_app = ProxyFix(
     x_prefix=1    # X-Forwarded-Prefix
 )
 
-# Configure SocketIO
 socketio = SocketIO(
     app,
-    async_mode='eventlet',
-    logger=True,
-    engineio_logger=True,
     cors_allowed_origins="*",
     ping_timeout=60,
     ping_interval=25,
-    max_http_buffer_size=1000000,
+    async_mode='eventlet',
     manage_session=False,
+    logger=True,
+    engineio_logger=True,
     message_queue=None,
-    websocket_ping_interval=25,
-    websocket_ping_timeout=60
+    max_http_buffer_size=1000000,
+    transports=['websocket']
 )
 
 # Initialize database and clean old games at startup
@@ -459,10 +450,10 @@ def get_real_ip():
     return request.remote_addr
 
 if __name__ == "__main__":
+    port = int(os.getenv('PORT', 5000))
     socketio.run(app, 
-                host='0.0.0.0',
-                port=int(os.getenv('PORT', 5000)),
+                host='0.0.0.0', 
+                port=port,
                 debug=True,
                 use_reloader=False,
-                log_output=True,
-                cors_allowed_origins="*")
+                log_output=True)
