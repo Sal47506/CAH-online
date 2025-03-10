@@ -63,10 +63,14 @@
 
     <script>
         const socket = io({
+            transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionDelay: 1000,
+            reconnectionAttempts: 5,
             reconnectionDelayMax: 5000,
-            reconnectionAttempts: 5
+            timeout: 60000,
+            autoConnect: true,
+            path: '/socket.io'
         });
         const gameId = "{{ game_id }}";
         let playerName = "";

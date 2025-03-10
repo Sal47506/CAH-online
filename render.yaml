@@ -3,10 +3,22 @@ services:
     name: cah-online
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 65 --log-level debug app:app
+    startCommand: >
+      gunicorn 
+      --worker-class eventlet 
+      --workers 1 
+      --bind 0.0.0.0:$PORT 
+      --timeout 120 
+      --keep-alive 65 
+      --log-level debug 
+      --access-logfile - 
+      --error-logfile - 
+      app:app
     healthCheckPath: /health
     healthCheckTimeout: 100
     healthCheckInterval: 15
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      - key: WEB_CONCURRENCY
+        value: 1

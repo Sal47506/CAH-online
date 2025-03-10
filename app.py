@@ -40,7 +40,11 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     ping_timeout=60,
     ping_interval=25,
-    async_mode='eventlet'
+    async_mode='eventlet',
+    manage_session=False,
+    logger=True,
+    engineio_logger=True,
+    transports=['websocket', 'polling']
 )
 
 # Initialize database and clean old games at startup
@@ -442,4 +446,5 @@ def get_real_ip():
     return request.remote_addr
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    port = int(os.getenv('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=True)
