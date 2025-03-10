@@ -1,5 +1,5 @@
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch(socket=True, select=True)
 
 from flask import Flask, render_template, request, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
@@ -13,6 +13,17 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 
+# Initialize app before other imports
+app = Flask(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Configure Flask
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
+app.config['PROPAGATE_EXCEPTIONS'] = True
+app.config['JSON_SORT_KEYS'] = False
+
 # Get Cloudflare IP ranges
 def get_cloudflare_ips():
     try:
@@ -23,11 +34,6 @@ def get_cloudflare_ips():
     except:
         return []
 
-# Load environment variables
-load_dotenv()
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
 # Add Cloudflare configuration
 app.config['CLOUDFLARE_IPS'] = get_cloudflare_ips()
 app.wsgi_app = ProxyFix(
@@ -38,20 +44,20 @@ app.wsgi_app = ProxyFix(
     x_prefix=1    # X-Forwarded-Prefix
 )
 
+# Configure SocketIO
 socketio = SocketIO(
     app,
+    async_mode='eventlet',
+    logger=True,
+    engineio_logger=True,
     cors_allowed_origins="*",
     ping_timeout=60,
     ping_interval=25,
-    async_mode='eventlet',
-    manage_session=False,
-    logger=True,
-    engineio_logger=True,
-    message_queue=None,
     max_http_buffer_size=1000000,
-    transports=['websocket', 'polling'],
-    always_connect=True,
-    engineio_logger_level='debug'
+    manage_session=False,
+    message_queue=None,
+    websocket_ping_interval=25,
+    websocket_ping_timeout=60
 )
 
 # Initialize database and clean old games at startup
