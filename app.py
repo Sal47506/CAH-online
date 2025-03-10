@@ -4,8 +4,36 @@ import json
 import random
 import string
 from database import init_db, save_game, load_game, delete_old_games
+import requests
+from werkzeug.middleware.proxy_fix import ProxyFix
+import os
+from dotenv import load_dotenv
+
+# Get Cloudflare IP ranges
+def get_cloudflare_ips():
+    try:
+        response = requests.get('https://api.cloudflare.com/client/v4/ips')
+        if response.status_code == 200:
+            return response.json()['result']['ipv4_cidrs'] + response.json()['result']['ipv6_cidrs']
+        return []
+    except:
+        return []
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default-dev-key')
+# Add Cloudflare configuration
+app.config['CLOUDFLARE_IPS'] = get_cloudflare_ips()
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,      # X-Forwarded-For
+    x_proto=1,    # X-Forwarded-Proto
+    x_host=1,     # X-Forwarded-Host
+    x_prefix=1    # X-Forwarded-Prefix
+)
+
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize database and clean old games at startup
@@ -373,6 +401,21 @@ def handle_spectator(data):
         game_rooms[game_id]["spectators"].add(spectator_name)
         join_room(game_id)
         emit("spectator_joined", {"name": spectator_name}, room=game_id)
+
+# Add security headers middleware
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
+# Rate limiting for specific endpoints
+def get_real_ip():
+    if request.headers.get('CF-Connecting-IP'):
+        return request.headers.get('CF-Connecting-IP')
+    return request.remote_addr
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

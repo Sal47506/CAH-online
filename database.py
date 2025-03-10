@@ -2,16 +2,29 @@ import sqlite3
 import json
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
-# Create data directory if it doesn't exist
-DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
-DB_PATH = os.path.join(DATA_DIR, 'cah_games.db')
+# Load environment variables
+load_dotenv()
+
+# Use environment variable for data directory or fall back to default
+DATA_DIR = os.getenv('CAH_DATA_DIR', os.path.join(os.path.dirname(__file__), 'data'))
+DB_PATH = os.path.join(DATA_DIR, os.getenv('CAH_DB_NAME', 'cah_games.db'))
+
+# Add database encryption key
+DB_KEY = os.getenv('CAH_DB_KEY', 'your-default-key-here')
 
 def init_db():
-    # Create data directory if it doesn't exist
-    os.makedirs(DATA_DIR, exist_ok=True)
+    # Ensure data directory permissions are restricted
+    os.makedirs(DATA_DIR, mode=0o700, exist_ok=True)
+    if os.name != 'nt':  # Not Windows
+        os.chmod(DATA_DIR, 0o700)
     
     conn = sqlite3.connect(DB_PATH)
+    # Set secure file permissions for the database
+    if os.name != 'nt':  # Not Windows
+        os.chmod(DB_PATH, 0o600)
+    
     c = conn.cursor()
     
     # Create games table

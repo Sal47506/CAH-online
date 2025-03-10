@@ -1,3 +1,20 @@
+# Database files
+data/*.db
+*.db
+*.sqlite3
+
+# Environment variables
 .env
-*.pyc
+.env*
+.env.local
+.env.*.local
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Logs
+*.log

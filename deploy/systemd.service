@@ -1,0 +1,12 @@
+[Unit]
+Description=CAH Online Game
+After=network.target
+
+[Service]
+User=cah
+WorkingDirectory=/opt/cah-online
+Environment="PATH=/opt/cah-online/venv/bin"
+ExecStart=/opt/cah-online/venv/bin/gunicorn --worker-class eventlet -w 1 app:app
+
+[Install]
+WantedBy=multi-user.target
