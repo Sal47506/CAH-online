@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
 import json
@@ -9,8 +12,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from dotenv import load_dotenv
 from datetime import datetime
-import eventlet
-eventlet.monkey_patch()
 
 # Get Cloudflare IP ranges
 def get_cloudflare_ips():
