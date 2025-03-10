@@ -9,6 +9,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+import eventlet
+eventlet.monkey_patch()
 
 # Get Cloudflare IP ranges
 def get_cloudflare_ips():
@@ -44,7 +46,9 @@ socketio = SocketIO(
     manage_session=False,
     logger=True,
     engineio_logger=True,
-    transports=['websocket', 'polling']
+    message_queue=None,
+    max_http_buffer_size=1000000,
+    transports=['websocket']
 )
 
 # Initialize database and clean old games at startup
@@ -447,4 +451,9 @@ def get_real_ip():
 
 if __name__ == "__main__":
     port = int(os.getenv('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    socketio.run(app, 
+                host='0.0.0.0', 
+                port=port,
+                debug=True,
+                use_reloader=False,
+                log_output=True)
