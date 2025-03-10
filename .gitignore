@@ -18,3 +18,9 @@ env/
 
 # Logs
 *.log
+
+# Heroku specific
+.env.local
+*.pyc
+__pycache__/
+.env

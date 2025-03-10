@@ -29,6 +29,10 @@ def get_cloudflare_ips():
 # Load environment variables only in development
 if os.getenv('FLASK_ENV') != 'production':
     load_dotenv('.env.local')
+else:
+    # Ensure data directory exists in production
+    data_dir = os.getenv('CAH_DATA_DIR', '/app/data')
+    os.makedirs(data_dir, exist_ok=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
