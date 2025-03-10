@@ -35,7 +35,13 @@ app.wsgi_app = ProxyFix(
     x_prefix=1    # X-Forwarded-Prefix
 )
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    ping_timeout=60,
+    ping_interval=25,
+    async_mode='eventlet'
+)
 
 # Initialize database and clean old games at startup
 with app.app_context():
