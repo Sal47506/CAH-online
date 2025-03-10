@@ -49,7 +49,9 @@ socketio = SocketIO(
     engineio_logger=True,
     message_queue=None,
     max_http_buffer_size=1000000,
-    transports=['websocket']
+    transports=['websocket', 'polling'],
+    always_connect=True,
+    engineio_logger_level='debug'
 )
 
 # Initialize database and clean old games at startup
@@ -451,10 +453,10 @@ def get_real_ip():
     return request.remote_addr
 
 if __name__ == "__main__":
-    port = int(os.getenv('PORT', 5000))
     socketio.run(app, 
-                host='0.0.0.0', 
-                port=port,
+                host='0.0.0.0',
+                port=int(os.getenv('PORT', 5000)),
                 debug=True,
                 use_reloader=False,
-                log_output=True)
+                log_output=True,
+                cors_allowed_origins="*")

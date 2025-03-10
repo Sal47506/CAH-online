@@ -3,7 +3,7 @@ services:
     name: cah-online
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 65 --log-level debug app:app
+    startCommand: gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 65 --max-requests 1200 --log-level debug wsgi:app
     healthCheckPath: /health
     healthCheckTimeout: 100
     healthCheckInterval: 15
@@ -14,3 +14,5 @@ services:
         value: 1
       - key: PYTHONUNBUFFERED
         value: "true"
+      - key: EVENTLET_NONBLOCK
+        value: "1"
